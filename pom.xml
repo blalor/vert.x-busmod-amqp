@@ -5,7 +5,7 @@
 
     <groupId>org.vertx.mod</groupId>
     <artifactId>amqp-busmod</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1-SNAPSHOT</version>
 
     <name>Vert.x AMQP BusMod</name>
 
