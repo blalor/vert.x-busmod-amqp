@@ -9,10 +9,17 @@
     <artifactId>amqp-busmod</artifactId>
     <version>0.0.1-SNAPSHOT</version>
 
+    <name>Vert.x AMQP BusMod</name>
+
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     </properties>
+
+    <scm>
+        <developerConnection>scm:git:https://github.com/blalor/vert.x-busmod-amqp.git</developerConnection>
+        <url>https://github.com/blalor/vert.x-busmod-amqp</url>
+    </scm>
 
     <dependencies>
         <!-- == compile == -->
