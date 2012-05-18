@@ -14,10 +14,12 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <github.global.server>github</github.global.server>
     </properties>
 
     <scm>
-        <developerConnection>scm:git:https://github.com/blalor/vert.x-busmod-amqp.git</developerConnection>
+        <connection>scm:git:git@github.com:blalor/vert.x-busmod-amqp.git</connection>
+        <developerConnection>scm:git:git@github.com:blalor/vert.x-busmod-amqp.git</developerConnection>
         <url>https://github.com/blalor/vert.x-busmod-amqp</url>
     </scm>
 
@@ -135,6 +137,19 @@
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>com.github.github</groupId>
+                <artifactId>downloads-maven-plugin</artifactId>
+                <version>0.5</version>
+                <configuration>
+                    <description>${project.version} release of ${project.name}</description>
+                    <override>true</override>
+                    <includes>
+                        <include>${project.artifactId}-*-mod.tar.gz</include>
+                    </includes>
+                </configuration>
             </plugin>
         </plugins>
     </build>
