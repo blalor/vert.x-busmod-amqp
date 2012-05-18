@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+    execute release (this is literal syntax!):
+        mvn release:prepare release:perform -Darguments=-DaltDeploymentRepository=id::default::file:///tmp/my_repo
+-->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 
     <modelVersion>4.0.0</modelVersion>
@@ -141,6 +145,7 @@
                 <groupId>com.github.github</groupId>
                 <artifactId>downloads-maven-plugin</artifactId>
                 <version>0.5</version>
+
                 <configuration>
                     <description>${project.version} release of ${project.name}</description>
                     <override>true</override>
@@ -148,6 +153,15 @@
                         <include>${project.artifactId}-*-mod.tar.gz</include>
                     </includes>
                 </configuration>
+
+                <executions>
+                    <execution>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>upload</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

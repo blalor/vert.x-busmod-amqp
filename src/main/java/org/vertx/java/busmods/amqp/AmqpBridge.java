@@ -25,6 +25,12 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Date;
+import java.util.GregorianCalendar;
+
+import javax.xml.datatype.DatatypeFactory;
+import javax.xml.datatype.DatatypeConfigurationException;
+import javax.xml.datatype.XMLGregorianCalendar;
 
 /**
  * Prototype for AMQP bridge
@@ -35,6 +41,7 @@ import java.util.Queue;
  * 3) Send message
  *
  * @author <a href="http://tfox.org">Tim Fox</a>
+ * @author <a href="http://github.com/blalor">Brian Lalor</a>
  */
 public class AmqpBridge extends BusModBase {
 
@@ -44,11 +51,19 @@ public class AmqpBridge extends BusModBase {
     private long consumerSeq;
     private Queue<Channel> availableChannels = new LinkedList<>();
 
+    private DatatypeFactory datatypeFactory;
+
     // {{{ start
     /** {@inheritDoc} */
     @Override
     public void start() {
         super.start();
+
+        try {
+            datatypeFactory = DatatypeFactory.newInstance();
+        } catch (DatatypeConfigurationException e) {
+            throw new IllegalStateException("unable to get datatype factory", e);
+        }
 
         String address = getMandatoryStringConfig("address");
         String uri = getMandatoryStringConfig("uri");
@@ -187,28 +202,52 @@ public class AmqpBridge extends BusModBase {
             {
                 long deliveryTag = envelope.getDeliveryTag();
 
-                // System.out.println("properties: " + properties);
+                System.out.println("properties: " + properties);
 
                 /*
                     {
-                        envelope: {
-                            deliveryTag: Number,
-                            exchange: String,
-                            routingKey: String
-                        }
+                        deliveryTag: Number,
+                        exchange: String,
+                        routingKey: String,
+                        properties: { … },
                         body: { … }
                     }
                 */
 
                 // blindly assumes that content is a JSON string; should check content-type…
-                JsonObject msg =
-                    new JsonObject()
-                        .putObject("envelope", new JsonObject()
-                            // .putNumber("deliveryTag", deliveryTag)
-                            .putString("exchange", envelope.getExchange())
-                            .putString("routingKey", envelope.getRoutingKey())
-                        )
-                        .putObject("body", new JsonObject(new String(body)));
+                JsonObject msg = new JsonObject()
+                    // .putNumber("deliveryTag", deliveryTag)
+                    .putString("exchange", envelope.getExchange())
+                    .putString("routingKey", envelope.getRoutingKey())
+                    .putObject("body", new JsonObject(new String(body)));
+
+                if (properties != null) {
+                    JsonObject jsonProps = new JsonObject();
+
+                    maybeSetProperty(jsonProps, "appId",           properties.getAppId());
+
+                    // I think these will always be "basic"
+                    // maybeSetProperty(jsonProps, "classId",         properties.getClassId());
+                    // maybeSetProperty(jsonProps, "className",       properties.getClassName());
+
+                    maybeSetProperty(jsonProps, "clusterId",       properties.getClusterId());
+                    maybeSetProperty(jsonProps, "contentEncoding", properties.getContentEncoding());
+                    maybeSetProperty(jsonProps, "contentType",     properties.getContentType());
+                    maybeSetProperty(jsonProps, "correlationId",   properties.getCorrelationId());
+                    maybeSetProperty(jsonProps, "deliveryMode",    properties.getDeliveryMode());
+                    maybeSetProperty(jsonProps, "expiration",      properties.getExpiration());
+                    maybeSetProperty(jsonProps, "headers",         properties.getHeaders());
+                    maybeSetProperty(jsonProps, "messageId",       properties.getMessageId());
+                    maybeSetProperty(jsonProps, "priority",        properties.getPriority());
+                    maybeSetProperty(jsonProps, "replyTo",         properties.getReplyTo());
+                    maybeSetProperty(jsonProps, "timestamp",       properties.getTimestamp());
+                    maybeSetProperty(jsonProps, "type",            properties.getType());
+                    maybeSetProperty(jsonProps, "userId",          properties.getUserId());
+
+                    if (jsonProps.size() > 0) {
+                        msg.putObject("properties", jsonProps);
+                    }
+                }
 
                 eb.send(forwardAddress, msg);
 
@@ -231,6 +270,32 @@ public class AmqpBridge extends BusModBase {
 
         if (channel != null) {
             availableChannels.add(channel);
+        }
+    }
+    // }}}
+
+    // {{{ maybeSetProperty
+    private void maybeSetProperty(final JsonObject json, final String key, final Object value) {
+        if (value != null) {
+            if (value instanceof String) {
+                json.putString(key, (String) value);
+            }
+            else if (value instanceof Number) {
+                json.putNumber(key, (Number) value);
+            }
+            else if (value instanceof Date) {
+                GregorianCalendar cal = new GregorianCalendar();
+                cal.setTime((Date) value);
+
+                XMLGregorianCalendar xmlCal =
+                    datatypeFactory.newXMLGregorianCalendar(cal);
+
+                json.putString(key, xmlCal.toXMLFormat());
+            }
+            else {
+                throw new IllegalArgumentException("unhandled type " + value.getClass().getName() + " for key " + key);
+            }
+
         }
     }
     // }}}

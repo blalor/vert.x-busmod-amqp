@@ -52,9 +52,7 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
             public void handle(final Message<JsonObject> msg) {
                 logger.fine("received msg: " + msg.body);
 
-                JsonObject envelope = msg.body.getObject("envelope");
-                tu.azzert(envelope != null, "no envelope in message");
-                tu.azzert("sensor_data".equals(envelope.getString("exchange")), "wrong exchange");
+                tu.azzert("sensor_data".equals(msg.body.getString("exchange")), "wrong exchange");
 
                 JsonObject body = msg.body.getObject("body");
                 tu.azzert(body != null, "no body in message");
