@@ -150,7 +150,7 @@
                     <description>${project.version} release of ${project.name}</description>
                     <override>true</override>
                     <includes>
-                        <include>${project.artifactId}-*-mod.tar.gz</include>
+                        <include>${project.artifactId}-${project.version}-mod.tar.gz</include>
                     </includes>
                 </configuration>
 
