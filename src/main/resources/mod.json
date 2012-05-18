@@ -1,0 +1,4 @@
+{
+  "main": "org.vertx.java.busmods.amqp.AmqpBridge",
+  "worker": true
+}
