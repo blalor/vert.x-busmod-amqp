@@ -59,7 +59,8 @@ public class TestAmqpBridge {
             .andReturn(defaultJsonConfig);
 
         expect(mockContainer.getLogger())
-            .andReturn(LoggerFactory.getLogger("mockContainer"));
+            .andReturn(LoggerFactory.getLogger("mockContainer"))
+            .anyTimes();
 
         verticle = new AmqpBridge();
         verticle.setVertx(mockVertx);

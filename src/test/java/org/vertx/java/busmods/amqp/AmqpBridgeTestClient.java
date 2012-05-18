@@ -52,9 +52,18 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
             public void handle(final Message<JsonObject> msg) {
                 logger.fine("received msg: " + msg.body);
 
-                tu.azzert("sensor_data".equals(msg.body.getString("exchange")), "wrong exchange");
+                tu.azzert("raw_xbee_frames".equals(msg.body.getString("exchange")), "wrong exchange");
 
-                JsonObject body = msg.body.getObject("body");
+                Object body;
+
+                if ("application/json".equals(msg.body.getObject("properties").getString("contentType"))) {
+                    body = msg.body.getObject("body");
+                } else {
+                    body = msg.body.getBinary("body");
+                }
+
+                logger.fine("received body class: " + body.getClass());
+                logger.fine("received body: " + body);
                 tu.azzert(body != null, "no body in message");
 
                 tu.testComplete();
@@ -65,12 +74,11 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
         logger.fine("address for registered handler: " + handlerId);
 
         JsonObject createMsg = new JsonObject();
-        createMsg.putString("exchange", "sensor_data");
-        createMsg.putString("routing_key", "*");
+        createMsg.putString("exchange", "raw_xbee_frames");
+        createMsg.putString("routing_key", "*.*");
         createMsg.putString("forward", handlerId);
 
         eb.send(AMQP_BRIDGE_ADDR + ".create-consumer", createMsg);
-
     }
     // }}}
 }

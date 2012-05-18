@@ -13,6 +13,8 @@ import org.vertx.java.core.Handler;
 import org.vertx.java.core.eventbus.EventBus;
 import org.vertx.java.core.eventbus.Message;
 import org.vertx.java.core.json.JsonObject;
+import org.vertx.java.core.json.DecodeException;
+import org.vertx.java.core.logging.Logger;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -21,10 +23,14 @@ import java.security.KeyManagementException;
 
 import java.net.URISyntaxException;
 
-import java.util.HashMap;
-import java.util.LinkedList;
+import java.util.Arrays;
 import java.util.Map;
+import java.util.HashMap;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.Queue;
+import java.util.LinkedList;
+
 import java.util.Date;
 import java.util.GregorianCalendar;
 
@@ -44,6 +50,26 @@ import javax.xml.datatype.XMLGregorianCalendar;
  * @author <a href="http://github.com/blalor">Brian Lalor</a>
  */
 public class AmqpBridge extends BusModBase {
+    private static final String RFC_JSON_MEDIA_TYPE = "application/json";
+
+    /**
+     * Set of allowed JSON content types.
+     */
+    private final Set<String> jsonContentTypes =
+        new HashSet<>(Arrays.asList(new String[] {
+            // http://stackoverflow.com/questions/477816/the-right-json-content-type
+
+            // RFC 4627
+            RFC_JSON_MEDIA_TYPE,
+
+            // others
+            "application/x-javascript",
+            "text/javascript",
+            "text/x-javascript",
+            "text/x-json"
+        }));
+
+    private Logger logger;
 
     private ConnectionFactory factory;
     private Connection conn;
@@ -58,6 +84,8 @@ public class AmqpBridge extends BusModBase {
     @Override
     public void start() {
         super.start();
+
+        logger = container.getLogger();
 
         try {
             datatypeFactory = DatatypeFactory.newInstance();
@@ -83,11 +111,13 @@ public class AmqpBridge extends BusModBase {
         try {
             conn = factory.newConnection(); // IOException
         } catch (IOException e) {
-            container.getLogger().error("Failed to create connection", e);
+            logger.error("Failed to create connection", e);
         }
 
         eb.registerHandler(address + ".create-consumer", new Handler<Message<JsonObject>>() {
             public void handle(final Message<JsonObject> message) {
+                logger.debug("Creating consumer: " + message.body);
+
                 String exchange = message.body.getString("exchange");
                 String routingKey = message.body.getString("routing_key");
                 String forwardAddress = message.body.getString("forward");
@@ -129,7 +159,7 @@ public class AmqpBridge extends BusModBase {
                 } catch (UnsupportedEncodingException e) {
                     throw new IllegalStateException("UTF-8 is not supported, eh?  Really?", e);
                 } catch (IOException e) {
-                    container.getLogger().error("Failed to send", e);
+                    logger.error("Failed to send", e);
 
                     reply.putString("status", "error");
                     reply.putString("message", "unable to send: " + e.getMessage());
@@ -150,7 +180,7 @@ public class AmqpBridge extends BusModBase {
         try {
             conn.close();
         } catch (Exception e) {
-            container.getLogger().error("Failed to close", e);
+            logger.error("Failed to close", e);
         }
     }
     // }}}
@@ -189,6 +219,7 @@ public class AmqpBridge extends BusModBase {
         // all this code just to set up a pub/sub consumer
 
         final Channel channel = getChannel();
+        final Logger logger = this.logger;
 
         String queueName = channel.queueDeclare().getQueue(); // IOException
         channel.queueBind(queueName, exchangeName, routingKey); // IOException
@@ -202,7 +233,7 @@ public class AmqpBridge extends BusModBase {
             {
                 long deliveryTag = envelope.getDeliveryTag();
 
-                System.out.println("properties: " + properties);
+                logger.trace("properties: " + properties);
 
                 /*
                     {
@@ -214,16 +245,17 @@ public class AmqpBridge extends BusModBase {
                     }
                 */
 
-                // blindly assumes that content is a JSON string; should check content-type…
                 JsonObject msg = new JsonObject()
                     // .putNumber("deliveryTag", deliveryTag)
                     .putString("exchange", envelope.getExchange())
-                    .putString("routingKey", envelope.getRoutingKey())
-                    .putObject("body", new JsonObject(new String(body)));
+                    .putString("routingKey", envelope.getRoutingKey());
+
+                String contentType = properties.getContentType();
+
+                JsonObject jsonProps = new JsonObject();
+                msg.putObject("properties", jsonProps);
 
                 if (properties != null) {
-                    JsonObject jsonProps = new JsonObject();
-
                     maybeSetProperty(jsonProps, "appId",           properties.getAppId());
 
                     // I think these will always be "basic"
@@ -232,7 +264,7 @@ public class AmqpBridge extends BusModBase {
 
                     maybeSetProperty(jsonProps, "clusterId",       properties.getClusterId());
                     maybeSetProperty(jsonProps, "contentEncoding", properties.getContentEncoding());
-                    maybeSetProperty(jsonProps, "contentType",     properties.getContentType());
+                    maybeSetProperty(jsonProps, "contentType",     contentType);
                     maybeSetProperty(jsonProps, "correlationId",   properties.getCorrelationId());
                     maybeSetProperty(jsonProps, "deliveryMode",    properties.getDeliveryMode());
                     maybeSetProperty(jsonProps, "expiration",      properties.getExpiration());
@@ -244,10 +276,34 @@ public class AmqpBridge extends BusModBase {
                     maybeSetProperty(jsonProps, "type",            properties.getType());
                     maybeSetProperty(jsonProps, "userId",          properties.getUserId());
 
-                    if (jsonProps.size() > 0) {
-                        msg.putObject("properties", jsonProps);
+                }
+
+                // attempt to decode content by content type
+                boolean decodedAsJson = false;
+                try {
+                    if ((contentType == null) || jsonContentTypes.contains(contentType)) {
+                        msg.putObject("body", new JsonObject(new String(body)));
+
+                        decodedAsJson = true;
+                        contentType = RFC_JSON_MEDIA_TYPE;
+                    }
+                } catch (DecodeException e) {
+                    logger.warn("Unable to decode message body as JSON", e);
+                } finally {
+                    if (! decodedAsJson) {
+                        decodedAsJson = false;
+
+                        if (contentType == null) {
+                            contentType = "application/binary";
+                        }
+
+                        logger.debug("storing body as " + contentType);
+
+                        msg.putBinary("body", body);
                     }
                 }
+
+                jsonProps.putString("contentType", contentType);
 
                 eb.send(forwardAddress, msg);
 
