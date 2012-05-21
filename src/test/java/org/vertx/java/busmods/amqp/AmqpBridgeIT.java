@@ -9,14 +9,10 @@ public class AmqpBridgeIT extends TestBase implements AmqpBridgeTests {
     protected void setUp() throws Exception {
         super.setUp();
 
-        startApp(AmqpBridgeTestClient.class.getName());
+        startApp(true, AmqpBridgeTestClient.class.getName());
     }
     // }}}
 
-    // {{{ testFoo
-    /** {@inheritDoc} */
-    public void testFoo() {
-        startTest(getMethodName());
-    }
-    // }}}
+    public void testFoo() { startTest(getMethodName()); }
+    public void testInvokeRpcWithSingleReply() { startTest(getMethodName()); }
 }

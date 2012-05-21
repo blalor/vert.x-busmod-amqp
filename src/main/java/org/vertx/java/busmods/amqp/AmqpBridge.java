@@ -34,6 +34,8 @@ import java.util.LinkedList;
 import java.util.Date;
 import java.util.GregorianCalendar;
 
+import java.util.UUID;
+
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.XMLGregorianCalendar;
@@ -55,7 +57,7 @@ public class AmqpBridge extends BusModBase {
     /**
      * Set of allowed JSON content types.
      */
-    private final Set<String> jsonContentTypes =
+    private static final Set<String> JSON_CONTENT_TYPES =
         new HashSet<>(Arrays.asList(new String[] {
             // http://stackoverflow.com/questions/477816/the-right-json-content-type
 
@@ -69,15 +71,25 @@ public class AmqpBridge extends BusModBase {
             "text/x-json"
         }));
 
-    private Logger logger;
+    private final DatatypeFactory datatypeFactory;
 
-    private ConnectionFactory factory;
     private Connection conn;
     private Map<Long, Channel> consumerChannels = new HashMap<>();
     private long consumerSeq;
     private Queue<Channel> availableChannels = new LinkedList<>();
 
-    private DatatypeFactory datatypeFactory;
+    private String callbackQueue;
+    private RPCCallbackHandler rpcCallbackHandler;
+
+    // {{{ constructor
+    public AmqpBridge() {
+        try {
+            datatypeFactory = DatatypeFactory.newInstance();
+        } catch (DatatypeConfigurationException e) {
+            throw new IllegalStateException("unable to get datatype factory", e);
+        }
+    }
+    // }}}
 
     // {{{ start
     /** {@inheritDoc} */
@@ -85,18 +97,10 @@ public class AmqpBridge extends BusModBase {
     public void start() {
         super.start();
 
-        logger = container.getLogger();
-
-        try {
-            datatypeFactory = DatatypeFactory.newInstance();
-        } catch (DatatypeConfigurationException e) {
-            throw new IllegalStateException("unable to get datatype factory", e);
-        }
-
         String address = getMandatoryStringConfig("address");
         String uri = getMandatoryStringConfig("uri");
 
-        factory = new ConnectionFactory();
+        ConnectionFactory factory = new ConnectionFactory();
 
         try {
             factory.setUri(uri);
@@ -111,61 +115,37 @@ public class AmqpBridge extends BusModBase {
         try {
             conn = factory.newConnection(); // IOException
         } catch (IOException e) {
-            logger.error("Failed to create connection", e);
+            throw new IllegalStateException("Failed to create connection", e);
         }
 
+        try {
+            rpcCallbackHandler = new RPCCallbackHandler(getChannel());
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to create queue for callbacks", e);
+        }
+
+        // register handlers
         eb.registerHandler(address + ".create-consumer", new Handler<Message<JsonObject>>() {
             public void handle(final Message<JsonObject> message) {
-                logger.debug("Creating consumer: " + message.body);
-
-                String exchange = message.body.getString("exchange");
-                String routingKey = message.body.getString("routing_key");
-                String forwardAddress = message.body.getString("forward");
-
-                JsonObject reply = new JsonObject();
-
-                try {
-                    reply.putNumber("id", createConsumer(exchange, routingKey, forwardAddress));
-                    reply.putString("status", "ok");
-                } catch (IOException e) {
-                    reply.putString("status", "error");
-                    reply.putString("message", "unable to create consumer: " + e.getMessage());
-                }
-
-                message.reply(reply);
+                handleCreateConsumer(message);
             }
         });
 
         eb.registerHandler(address + ".close-consumer", new Handler<Message<JsonObject>>() {
             public void handle(final Message<JsonObject> message) {
-                long id = (Long) message.body.getNumber("id");
-
-                closeConsumer(id);
+                handleCloseConsumer(message);
             }
         });
 
         eb.registerHandler(address + ".send", new Handler<Message<JsonObject>>() {
             public void handle(final Message<JsonObject> message) {
-                String exchange = message.body.getString("exchange");
-                String routingKey = message.body.getString("routing_key");
-                String body = message.body.getString("body");
+                handleSend(message);
+            }
+        });
 
-                JsonObject reply = new JsonObject();
-
-                try {
-                    send(exchange, routingKey, body.getBytes("UTF-8"));
-
-                    reply.putString("status", "ok");
-                } catch (UnsupportedEncodingException e) {
-                    throw new IllegalStateException("UTF-8 is not supported, eh?  Really?", e);
-                } catch (IOException e) {
-                    logger.error("Failed to send", e);
-
-                    reply.putString("status", "error");
-                    reply.putString("message", "unable to send: " + e.getMessage());
-                }
-
-                message.reply(reply);
+        eb.registerHandler(address + ".invoke_rpc", new Handler<Message<JsonObject>>() {
+            public void handle(final Message<JsonObject> message) {
+                handleInvokeRPC(message);
             }
         });
     }
@@ -198,6 +178,7 @@ public class AmqpBridge extends BusModBase {
     // {{{ send
     private void send(final String exchangeName,
                       final String routingKey,
+                      final AMQP.BasicProperties props,
                       final byte[] message)
         throws IOException
     {
@@ -205,7 +186,7 @@ public class AmqpBridge extends BusModBase {
 
         availableChannels.add(channel); // why?
 
-        channel.basicPublish(exchangeName, routingKey, null, message);
+        channel.basicPublish(exchangeName, routingKey, props, message);
     }
     // }}}
 
@@ -281,7 +262,7 @@ public class AmqpBridge extends BusModBase {
                 // attempt to decode content by content type
                 boolean decodedAsJson = false;
                 try {
-                    if ((contentType == null) || jsonContentTypes.contains(contentType)) {
+                    if ((contentType == null) || JSON_CONTENT_TYPES.contains(contentType)) {
                         msg.putObject("body", new JsonObject(new String(body)));
 
                         decodedAsJson = true;
@@ -352,6 +333,78 @@ public class AmqpBridge extends BusModBase {
                 throw new IllegalArgumentException("unhandled type " + value.getClass().getName() + " for key " + key);
             }
 
+        }
+    }
+    // }}}
+
+    // {{{ handleCreateConsumer
+    private void handleCreateConsumer(final Message<JsonObject> message) {
+        logger.debug("Creating consumer: " + message.body);
+
+        String exchange = message.body.getString("exchange");
+        String routingKey = message.body.getString("routingKey");
+        String forwardAddress = message.body.getString("forward");
+
+        JsonObject reply = new JsonObject();
+
+        try {
+            reply.putNumber("id", createConsumer(exchange, routingKey, forwardAddress));
+
+            sendOK(message, reply);
+        } catch (IOException e) {
+            sendError(message, "unable to create consumer: " + e.getMessage(), e);
+        }
+    }
+    // }}}
+
+    // {{{ handleCloseConsumer
+    private void handleCloseConsumer(final Message<JsonObject> message) {
+        long id = (Long) message.body.getNumber("id");
+
+        closeConsumer(id);
+    }
+    // }}}
+
+    // {{{ handleSend
+    private void handleSend(final Message<JsonObject> message) {
+        String exchange = message.body.getString("exchange");
+        String routingKey = message.body.getString("routingKey");
+        String body = message.body.getString("body");
+
+        try {
+            send(exchange, routingKey, null, body.getBytes("UTF-8"));
+
+            sendOK(message);
+        } catch (UnsupportedEncodingException e) {
+            throw new IllegalStateException("UTF-8 is not supported, eh?  Really?", e);
+        } catch (IOException e) {
+            sendError(message, "unable to send: " + e.getMessage(), e);
+        }
+    }
+    // }}}
+
+    // {{{ handleInvokeRPC
+    private void handleInvokeRPC(final Message<JsonObject> message) {
+        // exchange must default to non-null string
+        String exchange = message.body.getString("exchange", "");
+        String routingKey = message.body.getString("routingKey");
+
+        // the correlationId is what ties this all together.
+        String correlationId = UUID.randomUUID().toString();
+
+        AMQP.BasicProperties amqpProps = new AMQP.BasicProperties.Builder()
+            .correlationId(correlationId)
+            .replyTo(rpcCallbackHandler.getQueueName())
+            .build();
+
+        rpcCallbackHandler.addCorrelation(correlationId, message);
+
+        try {
+            send(exchange, routingKey, amqpProps, "whatever".getBytes("UTF-8"));
+        } catch (UnsupportedEncodingException e) {
+            throw new IllegalStateException("UTF-8 is not supported, eh?  Really?", e);
+        } catch (IOException e) {
+            logger.error("Failed to send", e);
         }
     }
     // }}}
