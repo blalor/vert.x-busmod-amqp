@@ -119,7 +119,7 @@ public class AmqpBridge extends BusModBase {
         }
 
         try {
-            rpcCallbackHandler = new RPCCallbackHandler(getChannel());
+            rpcCallbackHandler = new RPCCallbackHandler(getChannel(), eb);
         } catch (IOException e) {
             throw new IllegalStateException("Unable to create queue for callbacks", e);
         }
@@ -389,6 +389,11 @@ public class AmqpBridge extends BusModBase {
         String exchange = message.body.getString("exchange", "");
         String routingKey = message.body.getString("routingKey");
 
+        // if replyTo is non-null, then this is a multiple-response RPC invocation
+        String replyTo = message.body.getString("replyTo");
+
+        boolean isMultiResponse = (replyTo != null);
+
         // the correlationId is what ties this all together.
         String correlationId = UUID.randomUUID().toString();
 
@@ -397,14 +402,27 @@ public class AmqpBridge extends BusModBase {
             .replyTo(rpcCallbackHandler.getQueueName())
             .build();
 
-        rpcCallbackHandler.addCorrelation(correlationId, message);
+
+        if (isMultiResponse) {
+            // multiple-response invocation
+            rpcCallbackHandler.addMultiResponseCorrelation(correlationId, replyTo);
+        } else {
+            // standard call/response invocation; message.reply() will be called
+            rpcCallbackHandler.addCorrelation(correlationId, message);
+        }
 
         try {
-            send(exchange, routingKey, amqpProps, "whatever".getBytes("UTF-8"));
+            // @todo transform json -> bytes based on content type
+            send(exchange, routingKey, amqpProps, message.body.encode().getBytes("UTF-8"));
+
+            // always invoke message.reply to avoid ambiguity
+            if (isMultiResponse) {
+                sendOK(message);
+            }
         } catch (UnsupportedEncodingException e) {
             throw new IllegalStateException("UTF-8 is not supported, eh?  Really?", e);
         } catch (IOException e) {
-            logger.error("Failed to send", e);
+            sendError(message, "unable to publish: " + e.getMessage(), e);
         }
     }
     // }}}

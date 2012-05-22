@@ -19,6 +19,9 @@ import com.rabbitmq.client.AMQP;
 
 import java.io.IOException;
 
+import java.util.List;
+import java.util.ArrayList;
+
 import java.util.logging.Logger;
 import java.util.logging.Level;
 
@@ -196,6 +199,80 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
                 }
                 // }}}
             }
+        );
+    }
+    // }}}
+
+    // {{{ testInvokeRpcWithMultipleReplies
+    public void testInvokeRpcWithMultipleReplies() {
+        EventBus eb = getVertx().eventBus();
+
+        final int replyCount = 3;
+        final List<Message<JsonObject>> receivedMessages = new ArrayList<>();
+
+        // set up an anonymous EventBus handler for receiving our RPC responses
+        String handlerId = eb.registerHandler(new Handler<Message<JsonObject>>() {
+            // {{{ handle
+            /** {@inheritDoc} */
+            @Override
+            public void handle(final Message<JsonObject> msg) {
+                receivedMessages.add(msg);
+
+                logger.fine(msg.body.encode());
+
+                if (receivedMessages.size() == replyCount) {
+                    tu.testComplete();
+                }
+            }
+            // }}}
+        });
+
+        // build the AMQP client endpoint for the module to deliver to
+        Consumer cons = new DefaultConsumer(chan) {
+            public void handleDelivery(final String consumerTag,
+                                       final Envelope envelope,
+                                       final AMQP.BasicProperties props,
+                                       final byte[] body)
+                throws IOException
+            {
+                logger.fine("in handleDelivery: " + new String(body));
+
+                getChannel().basicAck(envelope.getDeliveryTag(), false);
+
+                AMQP.BasicProperties replyProps = new AMQP.BasicProperties();
+                replyProps.setCorrelationId(props.getCorrelationId());
+
+                for (int i = 1; i <= replyCount; i++) {
+                    getChannel().basicPublish(
+                        "",
+                        props.getReplyTo(),
+                        replyProps,
+                        new JsonObject().putString(
+                            "body",
+                            String.format("reply %d of %d", i, replyCount)
+                        ).encode().getBytes("UTF-8")
+                    );
+                }
+            }
+        };
+
+        try {
+            chan.basicConsume(amqpQueue, cons);
+        } catch (IOException e) {
+            String msg = "unable to consume";
+            logger.log(Level.SEVERE, msg, e);
+            tu.azzert(false, msg);
+        }
+
+        // setup is done; fire off the EventBus invocation
+        logger.fine("calling .invoke_rpc");
+
+        eb.send(
+            AMQP_BRIDGE_ADDR + ".invoke_rpc",
+            new JsonObject()
+                .putString("routingKey", amqpQueue)
+                .putString("replyTo", handlerId)
+                .putObject("body", new JsonObject().putString("foo", "bar"))
         );
     }
     // }}}
