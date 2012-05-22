@@ -193,7 +193,7 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
                 public void handle(final Message<JsonObject> msg) {
                     logger.fine("received msg: " + msg.body);
 
-                    tu.azzert(cannedJsonResponse.equals(msg.body));
+                    tu.azzert(cannedJsonResponse.equals(msg.body.getObject("body")));
 
                     tu.testComplete();
                 }
