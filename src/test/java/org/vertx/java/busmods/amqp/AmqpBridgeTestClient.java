@@ -26,6 +26,7 @@ import java.util.logging.Logger;
 import java.util.logging.Level;
 
 public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTests {
+    private static final String AMQP_URI = "amqp://localhost";
     private static final String AMQP_BRIDGE_ADDR = "test.amqpBridge";
 
     private final Logger logger = Logger.getLogger(getClass().getName());
@@ -42,7 +43,7 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
 
         JsonObject config = new JsonObject();
         config.putString("address", AMQP_BRIDGE_ADDR);
-        config.putString("uri", "amqp://localhost");
+        config.putString("uri", AMQP_URI);
 
         container.deployVerticle(AmqpBridge.class.getName(), config, 1, new SimpleHandler() {
             public void handle() {
@@ -54,7 +55,7 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
 
         try {
             ConnectionFactory cf = new ConnectionFactory();
-            cf.setUri("amqp://localhost");
+            cf.setUri(AMQP_URI);
 
             amqpConn = cf.newConnection();
             chan = amqpConn.createChannel();
