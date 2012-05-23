@@ -4,4 +4,5 @@ public interface AmqpBridgeTests {
     void testFoo();
     void testInvokeRpcWithSingleReply();
     void testInvokeRpcWithMultipleReplies();
+    void testSendBsonToAMQP();
 }

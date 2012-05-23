@@ -41,27 +41,7 @@ import java.util.logging.Level;
 abstract class MessageTransformingConsumer extends DefaultConsumer {
     private final Logger logger = Logger.getLogger(getClass().getName());
 
-    private static final String RFC_JSON_MEDIA_TYPE = "application/json";
-    private static final String BSON_MEDIA_TYPE = "application/bson";
-
-    /**
-     * Set of allowed JSON content types.
-     */
-    private static final Set<String> JSON_CONTENT_TYPES =
-        Collections.unmodifiableSet(
-            new HashSet<>(Arrays.asList(new String[] {
-                // http://stackoverflow.com/questions/477816/the-right-json-content-type
-
-                // RFC 4627
-                RFC_JSON_MEDIA_TYPE,
-
-                // others
-                "application/x-javascript",
-                "text/javascript",
-                "text/x-javascript",
-                "text/x-json"
-            }))
-        );
+    private ContentType defaultContentType;
 
     /**
      * This may or may not be thread safe.  Here goes nothin'…
@@ -71,8 +51,10 @@ abstract class MessageTransformingConsumer extends DefaultConsumer {
     private final BsonFactory bsonFactory = new BsonFactory();
 
     // {{{ constructor
-    public MessageTransformingConsumer(final Channel channel) {
+    public MessageTransformingConsumer(final Channel channel, final ContentType defaultContentType) {
         super(channel);
+
+        this.defaultContentType = defaultContentType;
 
         try {
             datatypeFactory = DatatypeFactory.newInstance();
@@ -111,8 +93,6 @@ abstract class MessageTransformingConsumer extends DefaultConsumer {
             .putString("exchange", envelope.getExchange())
             .putString("routingKey", envelope.getRoutingKey());
 
-        String contentType = properties.getContentType();
-
         JsonObject jsonProps = new JsonObject();
         msg.putObject("properties", jsonProps);
 
@@ -125,7 +105,6 @@ abstract class MessageTransformingConsumer extends DefaultConsumer {
 
             maybeSetProperty(jsonProps, "clusterId",       properties.getClusterId());
             maybeSetProperty(jsonProps, "contentEncoding", properties.getContentEncoding());
-            maybeSetProperty(jsonProps, "contentType",     contentType);
             maybeSetProperty(jsonProps, "correlationId",   properties.getCorrelationId());
             maybeSetProperty(jsonProps, "deliveryMode",    properties.getDeliveryMode());
             maybeSetProperty(jsonProps, "expiration",      properties.getExpiration());
@@ -147,43 +126,56 @@ abstract class MessageTransformingConsumer extends DefaultConsumer {
             maybeSetProperty(jsonProps, "userId",    properties.getUserId());
         }
 
+        ContentType contentType = defaultContentType;
+
+        try {
+            contentType = ContentType.fromString(properties.getContentType());
+        } catch (IllegalArgumentException e) {
+            logger.warning(
+                "unknown content type " + properties.getContentType() +
+                "; defaulting to " + contentType.getContentType()
+            );
+        }
+
         // attempt to decode content by content type
         boolean decoded = false;
         try {
-            if ((contentType == null) || JSON_CONTENT_TYPES.contains(contentType)) {
+            if (ContentType.JSON_CONTENT_TYPES.contains(contentType)) {
                 msg.putObject("body", new JsonObject(new String(body)));
 
                 decoded = true;
-                contentType = RFC_JSON_MEDIA_TYPE;
+                contentType = ContentType.APPLICATION_JSON;
             }
-            else if (BSON_MEDIA_TYPE.equals(contentType)) {
+            else if (ContentType.APPLICATION_BSON == contentType) {
                 ObjectMapper om = new ObjectMapper(bsonFactory);
-
                 Map<String,Object> data = om.readValue(new ByteArrayInputStream(body), Map.class);
-
-                logger.finest("data: " + data);
 
                 msg.putObject("body", new JsonObject(data));
 
                 decoded = true;
             }
+            else if (ContentType.TEXT_PLAIN == contentType) {
+                msg.putString(
+                    "body",
+                    new String(body, jsonProps.getString("contentEncoding", "UTF-8"))
+                );
+
+                decoded = true;
+            }
         } catch (DecodeException e) {
-            logger.log(Level.WARNING, "Unable to decode message body as JSON", e);
+            logger.log(Level.WARNING, "Unable to decode message body as " + contentType, e);
+        } catch (UnsupportedEncodingException e) {
+            logger.log(Level.WARNING, "Unsupported encoding decoding body", e);
         } finally {
             if (! decoded) {
-                decoded = false;
-
-                if (contentType == null) {
-                    contentType = "application/binary";
-                }
-
-                logger.finer("storing body as " + contentType);
+                contentType = ContentType.APPLICATION_BINARY;
+                logger.warning("storing body as " + contentType);
 
                 msg.putBinary("body", body);
             }
         }
 
-        jsonProps.putString("contentType", contentType);
+        jsonProps.putString("contentType", contentType.getContentType());
 
         // delegate handling of transformed message
         doHandle(consumerTag, envelope, properties, msg);

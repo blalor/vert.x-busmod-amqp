@@ -11,8 +11,11 @@ import org.vertx.java.busmods.BusModBase;
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.eventbus.EventBus;
 import org.vertx.java.core.eventbus.Message;
-import org.vertx.java.core.json.JsonObject;
 import org.vertx.java.core.logging.Logger;
+
+import org.vertx.java.core.json.JsonObject;
+import de.undercouch.bson4jackson.BsonFactory;
+import org.codehaus.jackson.map.ObjectMapper;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -45,8 +48,11 @@ public class AmqpBridge extends BusModBase {
     private long consumerSeq;
     private Queue<Channel> availableChannels = new LinkedList<>();
 
+    private final ObjectMapper bsonObjectMapper = new ObjectMapper(new BsonFactory());
+
     private String callbackQueue;
     private RPCCallbackHandler rpcCallbackHandler;
+    private ContentType defaultContentType;
 
     // {{{ start
     /** {@inheritDoc} */
@@ -56,6 +62,8 @@ public class AmqpBridge extends BusModBase {
 
         String address = getMandatoryStringConfig("address");
         String uri = getMandatoryStringConfig("uri");
+
+        defaultContentType = ContentType.fromString(getMandatoryStringConfig("defaultContentType"));
 
         ConnectionFactory factory = new ConnectionFactory();
 
@@ -76,7 +84,7 @@ public class AmqpBridge extends BusModBase {
         }
 
         try {
-            rpcCallbackHandler = new RPCCallbackHandler(getChannel(), eb);
+            rpcCallbackHandler = new RPCCallbackHandler(getChannel(), defaultContentType, eb);
         } catch (IOException e) {
             throw new IllegalStateException("Unable to create queue for callbacks", e);
         }
@@ -133,23 +141,27 @@ public class AmqpBridge extends BusModBase {
     // }}}
 
     // {{{ send
-    private void send(final AMQP.BasicProperties props, final JsonObject message)
+    private void send(final AMQP.BasicProperties _props, final JsonObject message)
         throws IOException
     {
         AMQP.BasicProperties.Builder amqpPropsBuilder = new AMQP.BasicProperties.Builder();
 
-        if (props != null) {
-            amqpPropsBuilder = props.builder();
+        if (_props != null) {
+            amqpPropsBuilder = _props.builder();
         }
 
         // correlationId and replyTo will already be set, if necessary
-        amqpPropsBuilder.contentEncoding("UTF-8");
 
         JsonObject ebProps = message.getObject("properties");
         if (ebProps != null) {
             amqpPropsBuilder.clusterId(ebProps.getString("clusterId"));
             amqpPropsBuilder.contentType(ebProps.getString("contentType"));
-            amqpPropsBuilder.deliveryMode(ebProps.getNumber("deliveryMode").intValue());
+            amqpPropsBuilder.contentEncoding(ebProps.getString("contentEncoding"));
+
+            if (ebProps.getNumber("deliveryMode") != null) {
+                amqpPropsBuilder.deliveryMode(ebProps.getNumber("deliveryMode").intValue());
+            }
+
             amqpPropsBuilder.expiration(ebProps.getString("expiration"));
 
             if (ebProps.getObject("headers") != null) {
@@ -159,7 +171,10 @@ public class AmqpBridge extends BusModBase {
             }
 
             amqpPropsBuilder.messageId(ebProps.getString("messageId"));
-            amqpPropsBuilder.priority(ebProps.getNumber("priority").intValue());
+
+            if (ebProps.getNumber("priority") != null) {
+                amqpPropsBuilder.priority(ebProps.getNumber("priority").intValue());
+            }
 
             // amqpPropsBuilder.timestamp(ebProps.getString("timestamp")); // @todo
             amqpPropsBuilder.type(ebProps.getString("type"));
@@ -167,20 +182,67 @@ public class AmqpBridge extends BusModBase {
         }
         
         Channel channel = getChannel();
-
         availableChannels.add(channel);
+
+        ContentType contentType = defaultContentType;
+
         try {
-            channel.basicPublish(
-                // exchange must default to non-null string
-                message.getString("exchange", ""),
-                message.getString("routingKey"),
-                amqpPropsBuilder.build(),
-                // @todo transform json -> bytes based on content type
-                message.getObject("body").encode().getBytes("UTF-8")
+            contentType = ContentType.fromString(amqpPropsBuilder.build().getContentType());
+        } catch (IllegalArgumentException e) {
+            logger.warn(
+                "Illegal content type; using default " + defaultContentType.getContentType()
             );
-        } catch (UnsupportedEncodingException e) {
-            throw new IllegalStateException("UTF-8 is not supported, eh?  Really?", e);
+
+            amqpPropsBuilder.contentType(contentType.getContentType());
         }
+
+        byte[] messageBodyBytes;
+
+        if (
+            ContentType.JSON_CONTENT_TYPES.contains(contentType) ||
+            (contentType == ContentType.TEXT_PLAIN)
+        ) {
+            String contentEncoding = amqpPropsBuilder.build().getContentEncoding();
+            if (contentEncoding == null) {
+                contentEncoding = "UTF-8";
+
+                amqpPropsBuilder.contentEncoding(contentEncoding);
+            }
+
+            try {
+                if (contentType == ContentType.TEXT_PLAIN) {
+                    messageBodyBytes = message.getString("body").getBytes(contentEncoding);
+                } else {
+                    messageBodyBytes = message.getObject("body").encode().getBytes(contentEncoding);
+                }
+            } catch (UnsupportedEncodingException e) {
+                throw new IllegalStateException("unsupported encoding " + contentEncoding, e);
+            }
+        }
+        else if (contentType == ContentType.APPLICATION_BSON) {
+            // this must be encoded to bytes by the sender, because Vert.x has
+            // no support for BSON over the wire
+
+            logger.debug("converting (.body): " + message);
+            // logger.debug("converting (map): " + message.getObject("body").toMap());
+            // logger.debug("class: " + message.getObject("body").getClass());
+
+            messageBodyBytes = message.getBinary("body");
+        }
+        else if (contentType == ContentType.TEXT_PLAIN) {
+            messageBodyBytes = message.getString("body").getBytes("UTF-8");
+        }
+        else {
+            throw new IllegalStateException("don't know how to transform " + contentType.getContentType());
+        }
+
+        channel.basicPublish(
+            // exchange must default to non-null string
+            message.getString("exchange", ""),
+            message.getString("routingKey"),
+            amqpPropsBuilder.build(),
+            messageBodyBytes
+        );
     }
     // }}}
 
@@ -192,7 +254,7 @@ public class AmqpBridge extends BusModBase {
     {
         Channel channel = getChannel();
 
-        Consumer cons = new MessageTransformingConsumer(channel) {
+        Consumer cons = new MessageTransformingConsumer(channel, defaultContentType) {
             public void doHandle(final String consumerTag,
                                  final Envelope envelope,
                                  final AMQP.BasicProperties properties,

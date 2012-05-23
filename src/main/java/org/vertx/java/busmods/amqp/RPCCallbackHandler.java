@@ -45,8 +45,12 @@ public class RPCCallbackHandler extends MessageTransformingConsumer {
     private EventBus eventBus;
 
     // {{{ constructor
-    public RPCCallbackHandler(final Channel channel, final EventBus eb) throws IOException {
-        super(channel);
+    public RPCCallbackHandler(final Channel channel,
+                              final ContentType defaultContentType,
+                              final EventBus eb)
+        throws IOException
+    {
+        super(channel, defaultContentType);
 
         queueName = channel.queueDeclare().getQueue();
         channel.basicConsume(queueName, this);

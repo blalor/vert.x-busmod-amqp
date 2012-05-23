@@ -16,4 +16,5 @@ public class AmqpBridgeIT extends TestBase implements AmqpBridgeTests {
     public void testFoo() { startTest(getMethodName()); }
     public void testInvokeRpcWithSingleReply() { startTest(getMethodName()); }
     public void testInvokeRpcWithMultipleReplies() { startTest(getMethodName()); }
+    public void testSendBsonToAMQP() { startTest(getMethodName()); }
 }
