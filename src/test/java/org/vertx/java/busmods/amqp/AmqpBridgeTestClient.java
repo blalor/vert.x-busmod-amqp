@@ -159,8 +159,9 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
 
                 getChannel().basicAck(envelope.getDeliveryTag(), false);
 
-                AMQP.BasicProperties replyProps = new AMQP.BasicProperties();
-                replyProps.setCorrelationId(props.getCorrelationId());
+                AMQP.BasicProperties replyProps = new AMQP.BasicProperties.Builder()
+                    .correlationId(props.getCorrelationId())
+                    .build();
 
                 getChannel().basicPublish(
                     "",
@@ -240,8 +241,15 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
 
                 getChannel().basicAck(envelope.getDeliveryTag(), false);
 
-                AMQP.BasicProperties replyProps = new AMQP.BasicProperties();
-                replyProps.setCorrelationId(props.getCorrelationId());
+                java.util.Map<String,Object> headers = new java.util.HashMap<>();
+                headers.put("qwerty", "uiop");
+
+                AMQP.BasicProperties replyProps =
+                    new AMQP.BasicProperties.Builder()
+                        .correlationId(props.getCorrelationId())
+                        .headers(headers)
+                        .type("Homer")
+                        .build();
 
                 for (int i = 1; i <= replyCount; i++) {
                     getChannel().basicPublish(

@@ -133,17 +133,54 @@ public class AmqpBridge extends BusModBase {
     // }}}
 
     // {{{ send
-    private void send(final String exchangeName,
-                      final String routingKey,
-                      final AMQP.BasicProperties props,
-                      final byte[] message)
+    private void send(final AMQP.BasicProperties props, final JsonObject message)
         throws IOException
     {
+        AMQP.BasicProperties.Builder amqpPropsBuilder = new AMQP.BasicProperties.Builder();
+
+        if (props != null) {
+            amqpPropsBuilder = props.builder();
+        }
+
+        // correlationId and replyTo will already be set, if necessary
+        amqpPropsBuilder.contentEncoding("UTF-8");
+
+        JsonObject ebProps = message.getObject("properties");
+        if (ebProps != null) {
+            amqpPropsBuilder.clusterId(ebProps.getString("clusterId"));
+            amqpPropsBuilder.contentType(ebProps.getString("contentType"));
+            amqpPropsBuilder.deliveryMode(ebProps.getNumber("deliveryMode").intValue());
+            amqpPropsBuilder.expiration(ebProps.getString("expiration"));
+
+            if (ebProps.getObject("headers") != null) {
+                logger.debug("headers: " + ebProps.getObject("headers"));
+                
+                amqpPropsBuilder.headers(ebProps.getObject("headers").toMap());
+            }
+
+            amqpPropsBuilder.messageId(ebProps.getString("messageId"));
+            amqpPropsBuilder.priority(ebProps.getNumber("priority").intValue());
+
+            // amqpPropsBuilder.timestamp(ebProps.getString("timestamp")); // @todo
+            amqpPropsBuilder.type(ebProps.getString("type"));
+            amqpPropsBuilder.userId(ebProps.getString("userId"));
+        }
+        
         Channel channel = getChannel();
 
         availableChannels.add(channel);
-
-        channel.basicPublish(exchangeName, routingKey, props, message);
+        try {
+            channel.basicPublish(
+                // exchange must default to non-null string
+                message.getString("exchange", ""),
+                message.getString("routingKey"),
+                amqpPropsBuilder.build(),
+                // @todo transform json -> bytes based on content type
+                message.getObject("body").encode().getBytes("UTF-8")
+            );
+        } catch (UnsupportedEncodingException e) {
+            throw new IllegalStateException("UTF-8 is not supported, eh?  Really?", e);
+        }
     }
     // }}}
 
@@ -222,16 +259,10 @@ public class AmqpBridge extends BusModBase {
 
     // {{{ handleSend
     private void handleSend(final Message<JsonObject> message) {
-        String exchange = message.body.getString("exchange");
-        String routingKey = message.body.getString("routingKey");
-        String body = message.body.getString("body");
-
         try {
-            send(exchange, routingKey, null, body.getBytes("UTF-8"));
+            send(null, message.body);
 
             sendOK(message);
-        } catch (UnsupportedEncodingException e) {
-            throw new IllegalStateException("UTF-8 is not supported, eh?  Really?", e);
         } catch (IOException e) {
             sendError(message, "unable to send: " + e.getMessage(), e);
         }
@@ -240,10 +271,6 @@ public class AmqpBridge extends BusModBase {
 
     // {{{ handleInvokeRPC
     private void handleInvokeRPC(final Message<JsonObject> message) {
-        // exchange must default to non-null string
-        String exchange = message.body.getString("exchange", "");
-        String routingKey = message.body.getString("routingKey");
-
         // if replyTo is non-null, then this is a multiple-response RPC invocation
         String replyTo = message.body.getString("replyTo");
 
@@ -252,10 +279,9 @@ public class AmqpBridge extends BusModBase {
         // the correlationId is what ties this all together.
         String correlationId = UUID.randomUUID().toString();
 
-        AMQP.BasicProperties amqpProps = new AMQP.BasicProperties.Builder()
+        AMQP.BasicProperties.Builder amqpPropsBuilder = new AMQP.BasicProperties.Builder()
             .correlationId(correlationId)
-            .replyTo(rpcCallbackHandler.getQueueName())
-            .build();
+            .replyTo(rpcCallbackHandler.getQueueName());
 
         if (isMultiResponse) {
             // multiple-response invocation
@@ -266,15 +292,12 @@ public class AmqpBridge extends BusModBase {
         }
 
         try {
-            // @todo transform json -> bytes based on content type
-            send(exchange, routingKey, amqpProps, message.body.encode().getBytes("UTF-8"));
+            send(amqpPropsBuilder.build(), message.body);
 
             // always invoke message.reply to avoid ambiguity
             if (isMultiResponse) {
                 sendOK(message);
             }
-        } catch (UnsupportedEncodingException e) {
-            throw new IllegalStateException("UTF-8 is not supported, eh?  Really?", e);
         } catch (IOException e) {
             sendError(message, "unable to publish: " + e.getMessage(), e);
         }

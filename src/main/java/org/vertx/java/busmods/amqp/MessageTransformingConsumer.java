@@ -4,16 +4,19 @@ import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.LongString;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Set;
+import java.util.Map;
 import java.util.HashSet;
 
 import java.util.Date;
 import java.util.GregorianCalendar;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.DatatypeConfigurationException;
@@ -119,7 +122,16 @@ abstract class MessageTransformingConsumer extends DefaultConsumer {
             maybeSetProperty(jsonProps, "correlationId",   properties.getCorrelationId());
             maybeSetProperty(jsonProps, "deliveryMode",    properties.getDeliveryMode());
             maybeSetProperty(jsonProps, "expiration",      properties.getExpiration());
-            maybeSetProperty(jsonProps, "headers",         new JsonObject(properties.getHeaders()));
+
+            if (properties.getHeaders() != null) {
+                JsonObject headersObj = new JsonObject();
+                jsonProps.putObject("headers", headersObj);
+                
+                for (Map.Entry<String,Object> entry : properties.getHeaders().entrySet()) {
+                    maybeSetProperty(headersObj, entry.getKey(), entry.getValue());
+                }
+            }
+
             maybeSetProperty(jsonProps, "messageId",       properties.getMessageId());
             maybeSetProperty(jsonProps, "priority",        properties.getPriority());
             maybeSetProperty(jsonProps, "replyTo",         properties.getReplyTo());
@@ -172,6 +184,16 @@ abstract class MessageTransformingConsumer extends DefaultConsumer {
             }
             else if (value instanceof JsonObject) {
                 json.putObject(key, (JsonObject) value);
+            }
+            else if (value instanceof LongString) {
+                try {
+                    json.putString(
+                        key,
+                        new String(((LongString) value).getBytes(), "UTF-8")
+                    );
+                } catch (UnsupportedEncodingException e) {
+                    throw new IllegalStateException("UTF-8 is not supported, eh?  Really?", e);
+                }
             }
             else if (value instanceof Date) {
                 GregorianCalendar cal = new GregorianCalendar();

@@ -103,6 +103,7 @@ public class RPCCallbackHandler extends MessageTransformingConsumer {
 
         String correlationId = properties.getCorrelationId();
 
+        // @todo clean up old correlations
         Object target = correlationMap.get(correlationId);
         if (target == null) {
             logger.warning("No message to reply to for " + correlationId);
