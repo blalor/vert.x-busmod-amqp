@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.Date;
 import java.util.GregorianCalendar;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 
@@ -24,6 +25,9 @@ import javax.xml.datatype.XMLGregorianCalendar;
 
 import org.vertx.java.core.json.JsonObject;
 import org.vertx.java.core.json.DecodeException;
+
+import de.undercouch.bson4jackson.BsonFactory;
+import org.codehaus.jackson.map.ObjectMapper;
 
 import java.util.logging.Logger;
 import java.util.logging.Level;
@@ -38,6 +42,7 @@ abstract class MessageTransformingConsumer extends DefaultConsumer {
     private final Logger logger = Logger.getLogger(getClass().getName());
 
     private static final String RFC_JSON_MEDIA_TYPE = "application/json";
+    private static final String BSON_MEDIA_TYPE = "application/bson";
 
     /**
      * Set of allowed JSON content types.
@@ -62,6 +67,8 @@ abstract class MessageTransformingConsumer extends DefaultConsumer {
      * This may or may not be thread safe.  Here goes nothin'…
      */
     private final DatatypeFactory datatypeFactory;
+
+    private final BsonFactory bsonFactory = new BsonFactory();
 
     // {{{ constructor
     public MessageTransformingConsumer(final Channel channel) {
@@ -126,35 +133,45 @@ abstract class MessageTransformingConsumer extends DefaultConsumer {
             if (properties.getHeaders() != null) {
                 JsonObject headersObj = new JsonObject();
                 jsonProps.putObject("headers", headersObj);
-                
+
                 for (Map.Entry<String,Object> entry : properties.getHeaders().entrySet()) {
                     maybeSetProperty(headersObj, entry.getKey(), entry.getValue());
                 }
             }
 
-            maybeSetProperty(jsonProps, "messageId",       properties.getMessageId());
-            maybeSetProperty(jsonProps, "priority",        properties.getPriority());
-            maybeSetProperty(jsonProps, "replyTo",         properties.getReplyTo());
-            maybeSetProperty(jsonProps, "timestamp",       properties.getTimestamp());
-            maybeSetProperty(jsonProps, "type",            properties.getType());
-            maybeSetProperty(jsonProps, "userId",          properties.getUserId());
-
+            maybeSetProperty(jsonProps, "messageId", properties.getMessageId());
+            maybeSetProperty(jsonProps, "priority",  properties.getPriority());
+            maybeSetProperty(jsonProps, "replyTo",   properties.getReplyTo());
+            maybeSetProperty(jsonProps, "timestamp", properties.getTimestamp());
+            maybeSetProperty(jsonProps, "type",      properties.getType());
+            maybeSetProperty(jsonProps, "userId",    properties.getUserId());
         }
 
         // attempt to decode content by content type
-        boolean decodedAsJson = false;
+        boolean decoded = false;
         try {
             if ((contentType == null) || JSON_CONTENT_TYPES.contains(contentType)) {
                 msg.putObject("body", new JsonObject(new String(body)));
 
-                decodedAsJson = true;
+                decoded = true;
                 contentType = RFC_JSON_MEDIA_TYPE;
+            }
+            else if (BSON_MEDIA_TYPE.equals(contentType)) {
+                ObjectMapper om = new ObjectMapper(bsonFactory);
+
+                Map<String,Object> data = om.readValue(new ByteArrayInputStream(body), Map.class);
+
+                logger.finest("data: " + data);
+
+                msg.putObject("body", new JsonObject(data));
+
+                decoded = true;
             }
         } catch (DecodeException e) {
             logger.log(Level.WARNING, "Unable to decode message body as JSON", e);
         } finally {
-            if (! decodedAsJson) {
-                decodedAsJson = false;
+            if (! decoded) {
+                decoded = false;
 
                 if (contentType == null) {
                     contentType = "application/binary";

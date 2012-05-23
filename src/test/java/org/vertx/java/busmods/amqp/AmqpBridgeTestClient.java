@@ -96,9 +96,14 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
 
                 tu.azzert("raw_xbee_frames".equals(msg.body.getString("exchange")), "wrong exchange");
 
+                String contentType = msg.body.getObject("properties").getString("contentType");
+
                 Object body;
 
-                if ("application/json".equals(msg.body.getObject("properties").getString("contentType"))) {
+                if (
+                    "application/json".equals(contentType) ||
+                    "application/bson".equals(contentType)
+                ) {
                     body = msg.body.getObject("body");
                 } else {
                     body = msg.body.getBinary("body");
