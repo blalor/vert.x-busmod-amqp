@@ -60,8 +60,10 @@ public class AmqpBridge extends BusModBase {
     public void start() {
         super.start();
 
-        String address = getMandatoryStringConfig("address");
+        final String address = getMandatoryStringConfig("address");
         String uri = getMandatoryStringConfig("uri");
+
+        logger.trace("address: " + address);
 
         defaultContentType = ContentType.fromString(getMandatoryStringConfig("defaultContentType"));
 
@@ -104,6 +106,8 @@ public class AmqpBridge extends BusModBase {
 
         eb.registerHandler(address + ".send", new Handler<Message<JsonObject>>() {
             public void handle(final Message<JsonObject> message) {
+                logger.trace("in " + address + ".send handler");
+
                 handleSend(message);
             }
         });
@@ -144,6 +148,8 @@ public class AmqpBridge extends BusModBase {
     private void send(final AMQP.BasicProperties _props, final JsonObject message)
         throws IOException
     {
+        logger.debug("got message: " + message);
+
         AMQP.BasicProperties.Builder amqpPropsBuilder = new AMQP.BasicProperties.Builder();
 
         if (_props != null) {
@@ -228,9 +234,6 @@ public class AmqpBridge extends BusModBase {
             // logger.debug("class: " + message.getObject("body").getClass());
 
             messageBodyBytes = message.getBinary("body");
-        }
-        else if (contentType == ContentType.TEXT_PLAIN) {
-            messageBodyBytes = message.getString("body").getBytes("UTF-8");
         }
         else {
             throw new IllegalStateException("don't know how to transform " + contentType.getContentType());
