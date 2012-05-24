@@ -238,6 +238,12 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
 
                 logger.fine(msg.body.encode());
 
+                // ensure correlation ID is passed back to us
+                tu.azzert(
+                    "thisIsMyCorrelationId".equals(msg.body.getObject("properties").getString("correlationId")),
+                    "didn't get correlation id back"
+                );
+
                 if (receivedMessages.size() == replyCount) {
                     tu.testComplete();
                 }
@@ -297,7 +303,13 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
             new JsonObject()
                 .putString("routingKey", amqpQueue)
                 .putString("replyTo", handlerId)
-                .putObject("properties", new JsonObject().putString("contentType", "application/json"))
+                .putObject(
+                    "properties",
+                    new JsonObject()
+                        .putString("contentType", "application/json")
+                        .putString("correlationId", "thisIsMyCorrelationId")
+                        .putNumber("timeToLive", 1)
+                )
                 .putObject("body", new JsonObject().putString("foo", "bar"))
         );
     }

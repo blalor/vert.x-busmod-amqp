@@ -347,7 +347,31 @@ public class AmqpBridge extends BusModBase {
 
         if (isMultiResponse) {
             // multiple-response invocation
-            rpcCallbackHandler.addMultiResponseCorrelation(correlationId, replyTo);
+
+            JsonObject msgProps = message.body.getObject("properties");
+
+            String ebCorrelationId = null;
+            Integer ttl = null;
+
+            if (msgProps != null) {
+                ebCorrelationId = msgProps.getString("correlationId");
+                ttl = ((Integer) msgProps.getNumber("timeToLive", 0)).intValue();
+
+                if (ttl == 0) {
+                    ttl = null;
+                }
+
+                // do not pass these on to send(); that could confuse things
+                msgProps.removeField("correlationId");
+                msgProps.removeField("timeToLive");
+            }
+
+            rpcCallbackHandler.addMultiResponseCorrelation(
+                correlationId,
+                ebCorrelationId,
+                replyTo,
+                ttl
+            );
         } else {
             // standard call/response invocation; message.reply() will be called
             rpcCallbackHandler.addCorrelation(correlationId, message);

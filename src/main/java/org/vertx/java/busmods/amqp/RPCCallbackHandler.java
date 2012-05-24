@@ -26,6 +26,44 @@ import java.util.logging.Level;
  * @author <a href="http://github.com/blalor">Brian Lalor</a>
  */
 public class RPCCallbackHandler extends MessageTransformingConsumer {
+    private class MultiResponseCorrelation {
+        /**
+         * Default time-to-live of 10 minutes.
+         */
+        private static final int DEFAULT_TTL = 10;
+
+        public final String eventBusCorrelationId;
+        public final String eventBusReplyToAddress;
+        private int ttl = DEFAULT_TTL;
+        private long expiration;
+
+        public MultiResponseCorrelation(final String correlationId,
+                                        final String replyTo,
+                                        final Integer ttl
+        ) {
+            this.eventBusCorrelationId = correlationId;
+            this.eventBusReplyToAddress = replyTo;
+
+            if (ttl != null) {
+                this.ttl = ttl;
+            }
+
+            updateExpiration();
+        }
+
+        // {{{ updateExpiration
+        public void updateExpiration() {
+            expiration = System.currentTimeMillis() + (ttl * 60 * 1000);
+        }
+        // }}}
+
+        // {{{ isExpired
+        public boolean isExpired() {
+            return System.currentTimeMillis() > expiration;
+        }
+        // }}}
+    }
+
     private final Logger logger = Logger.getLogger(getClass().getName());
 
     /**
@@ -79,8 +117,21 @@ public class RPCCallbackHandler extends MessageTransformingConsumer {
     // }}}
 
     // {{{ addMultiResponseCorrelation
-    public void addMultiResponseCorrelation(final String correlationId, final String replyTo) {
-        correlationMap.put(correlationId, replyTo);
+    /**
+     * @param correlationId The AMQP correlation property
+     * @param eventBusCorrelationId The correlationId provided by the EventBus sender
+     * @param replyTo the EventBus address to send replies to
+     * @param timeToLive duration of correlation after last received message
+     */
+    public void addMultiResponseCorrelation(final String correlationId,
+                                            final String eventBusCorrelationId,
+                                            final String replyTo,
+                                            final Integer timeToLive
+    ) {
+        correlationMap.put(
+            correlationId,
+            new MultiResponseCorrelation(eventBusCorrelationId, replyTo, timeToLive)
+        );
     }
     // }}}
 
@@ -107,7 +158,6 @@ public class RPCCallbackHandler extends MessageTransformingConsumer {
 
         String correlationId = properties.getCorrelationId();
 
-        // @todo clean up old correlations
         Object target = correlationMap.get(correlationId);
         if (target == null) {
             logger.warning("No message to reply to for " + correlationId);
@@ -118,9 +168,27 @@ public class RPCCallbackHandler extends MessageTransformingConsumer {
 
                 msg.reply(body);
             } else {
-                String replyTo = (String) target;
+                MultiResponseCorrelation mrc = (MultiResponseCorrelation) target;
+                mrc.updateExpiration();
 
-                eventBus.send(replyTo, body);
+                if (mrc.eventBusCorrelationId != null) {
+                    body.getObject("properties").putString("correlationId", mrc.eventBusCorrelationId);
+                }
+
+                eventBus.send(mrc.eventBusReplyToAddress, body);
+            }
+        }
+
+        // clean up old correlations
+        for (String cid : correlationMap.keySet()) {
+            Object o = correlationMap.get(cid);
+
+            if (o instanceof MultiResponseCorrelation) {
+                if (((MultiResponseCorrelation) o).isExpired()) {
+                    logger.finer("removing expired correlation " + cid);
+
+                    correlationMap.remove(cid);
+                }
             }
         }
     }
