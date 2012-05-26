@@ -6,6 +6,24 @@ This busmod is a bridge between Vert.x and an AMQP message broker (such as [Rabb
 Usage
 -----
 
+### load the verticle
+
+Programmatically, if you like:
+
+    vertx.deployWorkerVerticle(
+        "org.vertx.java.busmods.amqp.AmqpBridge",
+        {
+            "uri": "amqp://localhost",
+            "address": "amqp_bridge",
+            "defaultContentType": "application/json"
+        },
+        1,
+        function() {
+            // subscribe, if necessary, or send initial message
+        }
+    );
+
+
 ### subscribe to a queue or topic
 
     var handlerAddr = "my_addr";
@@ -15,7 +33,7 @@ Usage
     });
 
     eb.send(
-        "amqp_busmod.create-consumer",
+        "amqp_bridge.create-consumer",
         {
             "exchange" : "raw_xbee_frames",
             "routingKey" : "#",
@@ -29,7 +47,7 @@ Usage
 ### send a message to a queue or topic
 
     eb.send(
-        ""amqp_busmod.send",
+        ""amqp_bridge.send",
         {
             "routingKey" : "target_queue"
             "properties" : {
@@ -47,7 +65,7 @@ Usage
 Based on [this RabbitMQ article][rabbit_tut].
 
     eb.send(
-        "amqp_busmod.invoke_rpc",
+        "amqp_bridge.invoke_rpc",
         {
             "routingKey" : "target_queue",
             "body" : {
@@ -68,7 +86,7 @@ Based on [this RabbitMQ article][rabbit_tut].
     });
 
     eb.send(
-        ""amqp_busmod.invoke_rpc",
+        ""amqp_bridge.invoke_rpc",
         {
             "routingKey" : "target_queue",
             "replyTo" : handlerAddr,
