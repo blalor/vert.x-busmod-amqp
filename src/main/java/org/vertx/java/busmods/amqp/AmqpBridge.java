@@ -106,8 +106,6 @@ public class AmqpBridge extends BusModBase {
 
         eb.registerHandler(address + ".send", new Handler<Message<JsonObject>>() {
             public void handle(final Message<JsonObject> message) {
-                logger.trace("in " + address + ".send handler");
-
                 handleSend(message);
             }
         });
@@ -126,10 +124,12 @@ public class AmqpBridge extends BusModBase {
     public void stop() {
         consumerChannels.clear();
 
-        try {
-            conn.close();
-        } catch (Exception e) {
-            logger.error("Failed to close", e);
+        if (conn != null) {
+            try {
+                conn.close();
+            } catch (Exception e) {
+                logger.warn("Failed to close", e);
+            }
         }
     }
     // }}}
@@ -148,8 +148,6 @@ public class AmqpBridge extends BusModBase {
     private void send(final AMQP.BasicProperties _props, final JsonObject message)
         throws IOException
     {
-        logger.debug("got message: " + message);
-
         AMQP.BasicProperties.Builder amqpPropsBuilder = new AMQP.BasicProperties.Builder();
 
         if (_props != null) {
@@ -171,8 +169,6 @@ public class AmqpBridge extends BusModBase {
             amqpPropsBuilder.expiration(ebProps.getString("expiration"));
 
             if (ebProps.getObject("headers") != null) {
-                logger.debug("headers: " + ebProps.getObject("headers"));
-                
                 amqpPropsBuilder.headers(ebProps.getObject("headers").toMap());
             }
 
@@ -228,10 +224,6 @@ public class AmqpBridge extends BusModBase {
         else if (contentType == ContentType.APPLICATION_BSON) {
             // this must be encoded to bytes by the sender, because Vert.x has
             // no support for BSON over the wire
-
-            logger.debug("converting (.body): " + message);
-            // logger.debug("converting (map): " + message.getObject("body").toMap());
-            // logger.debug("class: " + message.getObject("body").getClass());
 
             messageBodyBytes = message.getBinary("body");
         }
@@ -296,8 +288,6 @@ public class AmqpBridge extends BusModBase {
 
     // {{{ handleCreateConsumer
     private void handleCreateConsumer(final Message<JsonObject> message) {
-        logger.debug("Creating consumer: " + message.body);
-
         String exchange = message.body.getString("exchange");
         String routingKey = message.body.getString("routingKey");
         String forwardAddress = message.body.getString("forward");

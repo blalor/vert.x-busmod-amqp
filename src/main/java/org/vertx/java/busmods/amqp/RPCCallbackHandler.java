@@ -94,8 +94,6 @@ public class RPCCallbackHandler extends MessageTransformingConsumer {
         channel.basicConsume(queueName, this);
 
         this.eventBus = eb;
-
-        logger.finest("initialization complete, with queue " + queueName);
     }
     // }}}
 

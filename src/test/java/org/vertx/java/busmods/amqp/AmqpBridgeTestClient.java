@@ -50,19 +50,6 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
     public void start() {
         super.start();
 
-        JsonObject config = new JsonObject();
-        config.putString("address", AMQP_BRIDGE_ADDR);
-        config.putString("uri", AMQP_URI);
-        config.putString("defaultContentType", "application/json");
-
-        container.deployVerticle(AmqpBridge.class.getName(), config, 1, new SimpleHandler() {
-            public void handle() {
-                logger.fine("app is ready");
-
-                tu.appReady();
-            }
-        });
-
         try {
             ConnectionFactory cf = new ConnectionFactory();
             cf.setUri(AMQP_URI);
@@ -72,10 +59,27 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
 
             amqpQueue = chan.queueDeclare().getQueue();
         } catch (Exception e) {
-            String msg = "unable to set up AMQP connection";
-            logger.log(Level.SEVERE, msg, e);
-            tu.azzert(false, msg);
+            // tu.azzert(false, msg);
+            tu.appStopped();
+
+            throw new IllegalStateException("unable to set up AMQP connection", e);
         }
+
+        container.deployVerticle(
+            AmqpBridge.class.getName(),
+            new JsonObject()
+                .putString("address", AMQP_BRIDGE_ADDR)
+                .putString("uri", AMQP_URI)
+                .putString("defaultContentType", "application/json"),
+            1,
+            new SimpleHandler() {
+                public void handle() {
+                    logger.fine("app is ready");
+
+                    tu.appReady();
+                }
+            }
+        );
     }
     // }}}
 
