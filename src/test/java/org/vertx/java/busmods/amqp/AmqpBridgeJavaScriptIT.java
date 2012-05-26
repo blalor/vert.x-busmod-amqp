@@ -216,4 +216,10 @@ public class AmqpBridgeJavaScriptIT extends TestBase {
         startTest(getMethodName());
     }
     // }}}
+
+    // {{{ testCreateConsumer
+    public void testCreateConsumer() throws Exception {
+        startTest(getMethodName());
+    }
+    // }}}
 }

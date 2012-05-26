@@ -78,6 +78,29 @@ function testInvokeRpcWithManyReplies() {
     );
 }
 
+function testCreateConsumer() {
+    var handlerAddr = "testCreateConsumer";
+
+    eb.registerHandler(handlerAddr, function(msg) {
+        logger.debug(JSON.stringify(msg));
+
+        tu.testComplete();
+    });
+
+    eb.send(
+        _config.address + ".create-consumer",
+        {
+            "exchange" : "raw_xbee_frames",
+            "routingKey" : "#",
+            "forward" : handlerAddr
+        },
+        function(reply) {
+            logger.debug(JSON.stringify(reply));
+            tu.azzert(reply.status == "ok");
+        }
+    );
+}
+
 vertx.deployWorkerVerticle(
     "org.vertx.java.busmods.amqp.AmqpBridge",
     _config,
