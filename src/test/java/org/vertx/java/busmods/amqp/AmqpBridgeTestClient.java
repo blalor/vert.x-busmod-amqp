@@ -6,7 +6,6 @@ import org.vertx.java.core.json.JsonObject;
 import de.undercouch.bson4jackson.BsonFactory;
 import org.codehaus.jackson.map.ObjectMapper;
 
-import org.vertx.java.core.SimpleHandler;
 import org.vertx.java.core.Handler;
 
 import org.vertx.java.core.eventbus.EventBus;
@@ -72,9 +71,9 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
                 .putString("uri", AMQP_URI)
                 .putString("defaultContentType", "application/json"),
             1,
-            new SimpleHandler() {
-                public void handle() {
-                    logger.fine("app is ready");
+            new Handler<String>() {
+                public void handle(final String evt) {
+                    logger.fine("app is ready [" + evt + "]");
 
                     tu.appReady();
                 }

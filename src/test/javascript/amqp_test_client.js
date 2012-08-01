@@ -101,15 +101,15 @@ function testCreateConsumer() {
     );
 }
 
+logger.fatal("registering tests");
+tu.registerTests(this);
+
 vertx.deployWorkerVerticle(
     "org.vertx.java.busmods.amqp.AmqpBridge",
     _config,
     1,
     function() {
-        logger.debug("registering tests");
-        tu.registerTests(this);
-
-        logger.debug("sending appReady");
+        logger.fatal("sending appReady");
         tu.appReady();
     }
 );

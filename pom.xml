@@ -7,9 +7,9 @@
 
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.vertx.mod</groupId>
+    <groupId>org.vert-x.mod</groupId>
     <artifactId>amqp-busmod</artifactId>
-    <version>1.1.1-SNAPSHOT</version>
+    <version>1.2.0-SNAPSHOT</version>
 
     <name>Vert.x AMQP BusMod</name>
 
@@ -48,30 +48,32 @@
 
         <!-- == provided == -->
         <dependency>
-            <groupId>org.vertx</groupId>
-            <artifactId>core</artifactId>
-            <version>1.0.0.final</version>
+            <groupId>org.vert-x</groupId>
+            <artifactId>vertx-core</artifactId>
+            <version>1.2.1.final</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>org.vertx</groupId>
-            <artifactId>platform</artifactId>
-            <version>1.0.0.final</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-            <version>3.4.2.Final</version>
+            <groupId>org.vert-x</groupId>
+            <artifactId>vertx-platform</artifactId>
+            <version>1.2.1.final</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.mozilla</groupId>
             <artifactId>rhino</artifactId>
-            <version>1.7R3</version>
+            <version>1.7R4</version>
             <scope>provided</scope>
         </dependency>
-        
+
+        <!-- required by org.vertx.java.deploy.impl.VerticleManager -->
+        <dependency>
+            <groupId>org.codehaus.groovy</groupId>
+            <artifactId>groovy-all</artifactId>
+            <version>2.0.0</version>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- required by org.vertx.java.core.json.impl.Json -->
         <dependency>
             <groupId>org.codehaus.jackson</groupId>
@@ -79,7 +81,6 @@
             <version>1.9.4</version>
             <scope>provided</scope>
         </dependency>
-
 
         <!-- == test == -->
         <dependency>
@@ -95,9 +96,9 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.vertx</groupId>
-            <artifactId>testframework</artifactId>
-            <version>1.0.0.final</version>
+            <groupId>org.vert-x</groupId>
+            <artifactId>vertx-testframework</artifactId>
+            <version>1.2.1.final</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
