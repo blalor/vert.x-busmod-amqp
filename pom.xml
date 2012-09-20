@@ -17,6 +17,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <github.global.server>github</github.global.server>
+
+        <vertx.version>1.2.3.final</vertx.version>
     </properties>
 
     <scm>
@@ -50,13 +52,13 @@
         <dependency>
             <groupId>org.vert-x</groupId>
             <artifactId>vertx-core</artifactId>
-            <version>1.2.1.final</version>
+            <version>${vertx.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.vert-x</groupId>
             <artifactId>vertx-platform</artifactId>
-            <version>1.2.1.final</version>
+            <version>${vertx.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -66,7 +68,7 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- required by org.vertx.java.deploy.impl.VerticleManager -->
+        <!-- integration-test; required by org.vertx.java.deploy.impl.VerticleManager -->
         <dependency>
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
@@ -74,7 +76,7 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- required by org.vertx.java.core.json.impl.Json -->
+        <!-- integration-test; required by org.vertx.java.core.json.impl.Json -->
         <dependency>
             <groupId>org.codehaus.jackson</groupId>
             <artifactId>jackson-mapper-asl</artifactId>
@@ -98,7 +100,7 @@
         <dependency>
             <groupId>org.vert-x</groupId>
             <artifactId>vertx-testframework</artifactId>
-            <version>1.2.1.final</version>
+            <version>${vertx.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
