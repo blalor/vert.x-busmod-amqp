@@ -32,7 +32,7 @@ import java.util.logging.Logger;
 import java.util.logging.Level;
 
 public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTests {
-    private static final String AMQP_URI = "amqp://localhost";
+    private static final String AMQP_URI = System.getProperty("amqp.uri");
     private static final String AMQP_BRIDGE_ADDR = "test.amqpBridge";
 
     private final Logger logger = Logger.getLogger(getClass().getName());

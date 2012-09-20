@@ -21,7 +21,7 @@ import java.io.IOException;
 public class AmqpBridgeJavaScriptIT extends TestBase {
     private final Logger logger = Logger.getLogger(getClass().getName());
 
-    private static final String AMQP_URI = "amqp://localhost";
+    private static final String AMQP_URI = System.getProperty("amqp.uri");
 
     private Connection amqpConn;
     private Channel chan;

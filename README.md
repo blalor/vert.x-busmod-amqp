@@ -6,6 +6,10 @@ This busmod is a bridge between Vert.x and an AMQP message broker (such as [Rabb
 Usage
 -----
 
+The examples below are mostly conceptual; if you want to see working examples, look at [`src/test/javascript/amqp_test_client.js`](tree/master/src/test/javascript/amqp_test_client.js).  They can be invoked as part of the integration test suite:
+
+    mvn -P integration-test -Damqp.uri=amqp://your-amqp-server-here verify
+
 ### load the verticle
 
 Programmatically, if you like:
@@ -47,7 +51,7 @@ Programmatically, if you like:
 ### send a message to a queue or topic
 
     eb.send(
-        ""amqp_bridge.send",
+        "amqp_bridge.send",
         {
             "routingKey" : "target_queue"
             "properties" : {
@@ -86,7 +90,7 @@ Based on [this RabbitMQ article][rabbit_tut].
     });
 
     eb.send(
-        ""amqp_bridge.invoke_rpc",
+        "amqp_bridge.invoke_rpc",
         {
             "routingKey" : "target_queue",
             "replyTo" : handlerAddr,

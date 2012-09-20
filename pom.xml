@@ -19,6 +19,7 @@
         <github.global.server>github</github.global.server>
 
         <vertx.version>1.2.3.final</vertx.version>
+        <amqp.uri>amqp://localhost</amqp.uri>
     </properties>
 
     <scm>
@@ -211,6 +212,7 @@
                         <configuration>
                             <systemPropertyVariables>
                                 <java.util.logging.config.file>${project.build.testOutputDirectory}/jul.properties</java.util.logging.config.file>
+                                <amqp.uri>${amqp.uri}</amqp.uri>
                             </systemPropertyVariables>
                         </configuration>
                     </plugin>
