@@ -14,8 +14,6 @@ import org.vertx.java.core.eventbus.Message;
 import org.vertx.java.core.logging.Logger;
 
 import org.vertx.java.core.json.JsonObject;
-import de.undercouch.bson4jackson.BsonFactory;
-import org.codehaus.jackson.map.ObjectMapper;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -47,8 +45,6 @@ public class AmqpBridge extends BusModBase {
     private Map<Long, Channel> consumerChannels = new HashMap<>();
     private long consumerSeq;
     private Queue<Channel> availableChannels = new LinkedList<>();
-
-    private final ObjectMapper bsonObjectMapper = new ObjectMapper(new BsonFactory());
 
     private String callbackQueue;
     private RPCCallbackHandler rpcCallbackHandler;
