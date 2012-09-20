@@ -2,6 +2,9 @@
 <!--
     execute release (this is literal syntax!):
         mvn release:prepare release:perform -Darguments=-DaltDeploymentRepository=id::default::file:///tmp/my_repo
+
+    "deploy" to GitHub downloads (again, literal):
+        mvn deploy -DaltDeploymentRepository=id::default::file:///tmp/my_repo
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 
