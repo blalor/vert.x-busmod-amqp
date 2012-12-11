@@ -98,7 +98,8 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
     public void testFoo() {
         EventBus eb = getVertx().eventBus();
 
-        String handlerId = eb.registerHandler(new Handler<Message<JsonObject>>() {
+        String handlerId = "testAddress1";
+        eb.registerHandler(handlerId, new Handler<Message<JsonObject>>() {
             // {{{ handle
             /** {@inheritDoc} */
             @Override
@@ -231,8 +232,9 @@ public class AmqpBridgeTestClient extends TestClientBase implements AmqpBridgeTe
         final int replyCount = 3;
         final List<Message<JsonObject>> receivedMessages = new ArrayList<>();
 
+        String handlerId = "testAddress2";
         // set up an anonymous EventBus handler for receiving our RPC responses
-        String handlerId = eb.registerHandler(new Handler<Message<JsonObject>>() {
+        eb.registerHandler(handlerId, new Handler<Message<JsonObject>>() {
             // {{{ handle
             /** {@inheritDoc} */
             @Override
